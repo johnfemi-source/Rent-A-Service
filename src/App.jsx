@@ -1,0 +1,2489 @@
+import './App.css'
+import { useState, useEffect } from 'react'
+
+const LANDLORD_API = import.meta.env.VITE_LANDLORD_API_URL || 'http://localhost:8000'
+const TENANT_API = import.meta.env.VITE_TENANT_API_URL || 'http://localhost:8001'
+const CARETAKER_API = import.meta.env.VITE_CARETAKER_API_URL || 'http://localhost:8002'
+
+const stats = [
+  { value: '2,400+', label: 'Landlords onboarded' },
+  { value: '41,000+', label: 'Units managed' },
+  { value: '₦12.8B+', label: 'Rent collected' },
+  { value: '98.2%', label: 'Collection rate' },
+]
+
+const features = [
+  {
+    title: 'Nomba Virtual Accounts',
+    description: 'Each tenant gets a dedicated virtual account. Payments post automatically, zero manual reconciliation.',
+  },
+  {
+    title: 'Instant Notifications',
+    description: 'Real-time alerts for every payment, missed rent, or account event — SMS, email, and in-app.',
+  },
+  {
+    title: 'Bank-Grade Security',
+    description: 'End-to-end encryption, 2FA, and audit trails on every transaction. Your money is safe.',
+  },
+  {
+    title: 'Analytics & Reports',
+    description: 'Live dashboards for occupancy, revenue trends, and overdue analysis — exported in one click.',
+  },
+  {
+    title: 'Multi-Property Support',
+    description: 'Manage unlimited properties, units, and tenants from a single workspace.',
+  },
+  {
+    title: 'Auto-Generated Receipts',
+    description: 'Professional PDF receipts sent automatically after every successful payment.',
+  },
+]
+
+const steps = [
+  { num: '01', title: 'Add your properties', desc: 'Create properties and units in the dashboard.' },
+  { num: '02', title: 'Invite tenants', desc: 'Tenants receive a link to complete their profile.' },
+  { num: '03', title: 'VAs auto-created', desc: 'Nomba generates a unique account per tenant instantly.' },
+  { num: '04', title: 'Collect automatically', desc: 'Payments post, receipts send — zero manual work.' },
+]
+
+const plans = [
+  {
+    name: 'Starter',
+    price: '₦9,900',
+    period: '/month',
+    units: 'Up to 20 units',
+    features: ['Virtual accounts', 'Payment history', 'Email notifications', 'Basic reports'],
+    cta: 'Start Free Trial',
+  },
+  {
+    name: 'Growth',
+    price: '₦24,900',
+    period: '/month',
+    units: 'Up to 100 units',
+    features: ['Everything in Starter', 'SMS notifications', 'Caretaker portal', 'Advanced analytics', 'Priority support'],
+    cta: 'Get Started',
+    featured: true,
+  },
+  {
+    name: 'Enterprise',
+    price: 'Custom',
+    period: '',
+    units: 'Unlimited units',
+    features: ['Everything in Growth', 'Dedicated account manager', 'API access', 'White-label option', 'SLA guarantee'],
+    cta: 'Contact Sales',
+  },
+]
+
+function App() {
+  const [currentPage, setCurrentPage] = useState('landing') // 'landing', 'login', 'dashboard', 'signup'
+  const [userType, setUserType] = useState('Landlord')
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
+  const [phone, setPhone] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+
+  // Add Tenant (landlord) states
+  const [showAddTenantForm, setShowAddTenantForm] = useState(false)
+  const [tName, setTName] = useState('')
+  const [tEmail, setTEmail] = useState('')
+  const [tPhone, setTPhone] = useState('')
+  const [tFlatNo, setTFlatNo] = useState('')
+  const [addTenantError, setAddTenantError] = useState('')
+  const [addTenantLoading, setAddTenantLoading] = useState(false)
+  const [addTenantSuccess, setAddTenantSuccess] = useState('')
+
+  // Set Password (tenant) states
+  const [showSetPasswordForm, setShowSetPasswordForm] = useState(false)
+  const [spIdentifier, setSpIdentifier] = useState('')
+  const [spNewPassword, setSpNewPassword] = useState('')
+  const [spError, setSpError] = useState('')
+  const [spSuccess, setSpSuccess] = useState('')
+  const [spLoading, setSpLoading] = useState(false)
+
+  // Add Caretaker (landlord) states
+  const [showAddCaretakerForm, setShowAddCaretakerForm] = useState(false)
+  const [cName, setCName] = useState('')
+  const [cEmail, setCEmail] = useState('')
+  const [cPhone, setCPhone] = useState('')
+  const [cFlatNo, setCFlatNo] = useState('')
+  const [addCaretakerError, setAddCaretakerError] = useState('')
+  const [addCaretakerLoading, setAddCaretakerLoading] = useState(false)
+  const [addCaretakerSuccess, setAddCaretakerSuccess] = useState('')
+  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [loginError, setLoginError] = useState('')
+  const [loginLoading, setLoginLoading] = useState(false)
+  const [currentUser, setCurrentUser] = useState(null)
+  const [activeTab, setActiveTab] = useState('Dashboard')
+
+  const loggedInUser = currentUser?.land_lord || currentUser?.tenant || currentUser?.care_taker || null
+  const displayName = loggedInUser?.name || loggedInUser?.land_lord_name || 'User'
+  const initials = displayName
+    .split(' ')
+    .filter(Boolean)
+    .map(w => w[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase()
+
+  // Search & Filter States
+  const [propertySearch, setPropertySearch] = useState('')
+  const [unitFilter, setUnitFilter] = useState('All')
+  const [tenantSearch, setTenantSearch] = useState('')
+  const [paymentSearch, setPaymentSearch] = useState('')
+  const [paymentFilter, setPaymentFilter] = useState('All')
+  const [reportsFilter, setReportsFilter] = useState('Monthly')
+  const [settingsTab, setSettingsTab] = useState('Profile')
+  const [landlordVirtualAccount, setLandlordVirtualAccount] = useState(null)
+
+  // Caretaker Dashboard states
+  const [maintenanceRequests, setMaintenanceRequests] = useState([])
+  const [maintenanceSummary, setMaintenanceSummary] = useState({ open: 0, in_progress: 0, completed: 0 })
+  const [maintenanceLoading, setMaintenanceLoading] = useState(true)
+  const [maintenanceError, setMaintenanceError] = useState('')
+  const [showReportIssueForm, setShowReportIssueForm] = useState(false)
+  const [riTitle, setRiTitle] = useState('')
+  const [riPriority, setRiPriority] = useState('Medium')
+  const [riUnit, setRiUnit] = useState('')
+  const [riPropertyName, setRiPropertyName] = useState('')
+  const [riError, setRiError] = useState('')
+  const [riLoading, setRiLoading] = useState(false)
+  const [riSuccess, setRiSuccess] = useState('')
+
+  const fetchMaintenanceData = async () => {
+    setMaintenanceLoading(true)
+    setMaintenanceError('')
+    try {
+      const [listResponse, summaryResponse] = await Promise.all([
+        fetch(`${CARETAKER_API}/maintenance-requests`),
+        fetch(`${CARETAKER_API}/maintenance-requests/summary`),
+      ])
+      const listData = await listResponse.json()
+      const summaryData = await summaryResponse.json()
+      if (!listResponse.ok || !summaryResponse.ok) {
+        setMaintenanceError('Could not load maintenance requests')
+        setMaintenanceLoading(false)
+        return
+      }
+      setMaintenanceRequests(listData)
+      setMaintenanceSummary(summaryData)
+      setMaintenanceLoading(false)
+    } catch (err) {
+      setMaintenanceError('Could not reach the server. Please try again.')
+      setMaintenanceLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (currentUser?.role === 'Caretaker') {
+      fetchMaintenanceData()
+    }
+  }, [currentUser])
+
+  const handleReportIssue = async (e) => {
+    e.preventDefault()
+    setRiError('')
+    setRiSuccess('')
+    setRiLoading(true)
+    try {
+      const response = await fetch(`${CARETAKER_API}/maintenance-requests`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: riTitle,
+          priority: riPriority,
+          unit: riUnit,
+          property_name: riPropertyName,
+          care_taker_id: loggedInUser?.id || '',
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        setRiError(data.detail || 'Could not report issue')
+        setRiLoading(false)
+        return
+      }
+      setRiSuccess('Issue reported successfully.')
+      setRiTitle('')
+      setRiPriority('Medium')
+      setRiUnit('')
+      setRiPropertyName('')
+      setRiLoading(false)
+      fetchMaintenanceData()
+    } catch (err) {
+      setRiError('Could not reach the server. Please try again.')
+      setRiLoading(false)
+    }
+  }
+
+  const handleUpdateRequestStatus = async (requestId, newStatus) => {
+    try {
+      await fetch(`${CARETAKER_API}/maintenance-requests/${requestId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      })
+      fetchMaintenanceData()
+    } catch (err) {
+      setMaintenanceError('Could not update status. Please try again.')
+    }
+  }
+
+  // Profile Settings States
+  const [profileFirstName, setProfileFirstName] = useState('')
+  const [profileLastName, setProfileLastName] = useState('')
+  const [profileEmail, setProfileEmail] = useState('')
+  const [profilePhone, setProfilePhone] = useState('')
+  const [profileCompany, setProfileCompany] = useState('')
+  const [profileAddress, setProfileAddress] = useState('')
+  const [showSaveToast, setShowSaveToast] = useState(false)
+  const [vaNumberInput, setVaNumberInput] = useState('')
+  const [vaLoading, setVaLoading] = useState(false)
+  const [vaError, setVaError] = useState('')
+  const [vaSuccess, setVaSuccess] = useState('')
+
+  // Copy feedback state
+  const [copiedId, setCopiedId] = useState(null)
+
+  const handleCopy = (text, id) => {
+    navigator.clipboard.writeText(text)
+    setCopiedId(id)
+    setTimeout(() => setCopiedId(null), 1500)
+  };
+
+  const handleSaveSettings = (e) => {
+    e.preventDefault()
+    setShowSaveToast(true)
+    setTimeout(() => setShowSaveToast(false), 3000)
+  };
+
+  const handleSaveVirtualAccount = async (e) => {
+    e.preventDefault()
+    setVaError('')
+    setVaSuccess('')
+    setVaLoading(true)
+    try {
+      const response = await fetch(`${LANDLORD_API}/landlord/virtual-account`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          identifier: profileEmail,
+          virtual_account_number: vaNumberInput,
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        setVaError(data.detail || 'Could not save virtual account number')
+        setVaLoading(false)
+        return
+      }
+      setVaSuccess('Virtual account number saved.')
+      setVaLoading(false)
+    } catch (err) {
+      setVaError('Could not reach the server. Please try again.')
+      setVaLoading(false)
+    }
+  }
+
+  const handleSignup = async (e) => {
+    e.preventDefault()
+    setLoginError('')
+    setLoginLoading(true)
+    try {
+      const registerResponse = await fetch(`${LANDLORD_API}/landlord/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: `${firstName} ${lastName}`.trim(),
+          password,
+          phone_number: phone,
+          email,
+        }),
+      })
+      const registerData = await registerResponse.json()
+      if (!registerResponse.ok) {
+        setLoginError(registerData.detail || 'Could not create account')
+        setLoginLoading(false)
+        return
+      }
+      setUserType('Landlord')
+      const loginResponse = await fetch(`${LANDLORD_API}/landlord/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: email, password }),
+      })
+      const loginData = await loginResponse.json()
+      if (!loginResponse.ok) {
+        setLoginError('Account created, but auto-login failed. Please sign in.')
+        setLoginLoading(false)
+        setCurrentPage('login')
+        return
+      }
+      setCurrentUser({ role: 'Landlord', ...loginData })
+      setCurrentPage('dashboard')
+      setActiveTab('Dashboard')
+      const user = loginData.land_lord || {}
+      const nameParts = (user.name || '').split(' ')
+      setProfileFirstName(nameParts[0] || '')
+      setProfileLastName(nameParts.slice(1).join(' ') || '')
+      setProfileEmail(user.email || '')
+      setProfilePhone(user.phone_number || '')
+      setLoginLoading(false)
+    } catch (err) {
+      setLoginError('Could not reach the server. Please try again.')
+      setLoginLoading(false)
+    }
+  }
+
+  const handleLogin = async (e) => {
+    e.preventDefault()
+    setLoginError('')
+    setLoginLoading(true)
+
+    const apiBase = userType === 'Landlord' ? LANDLORD_API
+      : userType === 'Tenant' ? TENANT_API
+      : CARETAKER_API
+
+    const endpoint = userType === 'Landlord' ? '/landlord/login'
+      : userType === 'Tenant' ? '/tenants/login'
+      : '/caretakers/login'
+
+    try {
+      const response = await fetch(`${apiBase}${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: email, password }),
+      })
+
+      const data = await response.json()
+      console.log('LOGIN RESPONSE:', data)
+
+      if (!response.ok) {
+        setLoginError(data.detail || 'Invalid credentials')
+        setLoginLoading(false)
+        return
+      }
+
+      setCurrentUser({ role: userType, ...data })
+      setActiveTab('Dashboard')
+      const user = data.land_lord || data.tenant || data.care_taker || {}
+      const nameParts = (user.name || '').split(' ')
+      setProfileFirstName(nameParts[0] || '')
+      setProfileLastName(nameParts.slice(1).join(' ') || '')
+      setProfileEmail(user.email || '')
+      setProfilePhone(user.phone_number || '')
+      setProfileCompany(user.property_address || '')
+      setProfileAddress(user.residential_number || '')
+      setLoginLoading(false)
+      setCurrentPage('dashboard')
+    } catch (err) {
+      setLoginError('Could not reach the server. Please try again.')
+      setLoginLoading(false)
+    }
+  };
+
+  const handleAddTenant = async (e) => {
+    e.preventDefault()
+    setAddTenantError('')
+    setAddTenantSuccess('')
+    setAddTenantLoading(true)
+    try {
+      const response = await fetch(`${LANDLORD_API}/landlord/tenants`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: tName,
+          tenant_email: tEmail,
+          phone_number: tPhone,
+          flat_no: tFlatNo,
+          landlord_email: profileEmail,
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        setAddTenantError(data.detail || 'Could not add tenant')
+        setAddTenantLoading(false)
+        return
+      }
+      setAddTenantSuccess(`Tenant ${tName} added successfully.`)
+      setTName('')
+      setTEmail('')
+      setTPhone('')
+      setTFlatNo('')
+      setAddTenantLoading(false)
+      fetchTenants()
+    } catch (err) {
+      setAddTenantError('Could not reach the server. Please try again.')
+      setAddTenantLoading(false)
+    }
+  };
+
+  const handleSetPassword = async (e) => {
+    e.preventDefault()
+    setSpError('')
+    setSpSuccess('')
+
+    if (spNewPassword.length < 8) {
+      setSpError('Password must be at least 8 characters long.')
+      return
+    }
+
+    setSpLoading(true)
+    try {
+      const spApiBase = userType === 'Caretaker' ? CARETAKER_API : TENANT_API
+      const spEndpoint = userType === 'Caretaker' ? '/caretakers/set-password' : '/tenants/set-password'
+      const response = await fetch(`${spApiBase}${spEndpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          identifier: spIdentifier,
+          new_password: spNewPassword,
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        setSpError(data.detail || 'Could not set password')
+        setSpLoading(false)
+        return
+      }
+      setSpSuccess('Password set successfully. You can now sign in.')
+      setSpIdentifier('')
+      setSpNewPassword('')
+      setSpLoading(false)
+    } catch (err) {
+      setSpError('Could not reach the server. Please try again.')
+      setSpLoading(false)
+    }
+  };
+
+  const handleAddCaretaker = async (e) => {
+    e.preventDefault()
+    setAddCaretakerError('')
+    setAddCaretakerSuccess('')
+    setAddCaretakerLoading(true)
+    try {
+      const response = await fetch(`${LANDLORD_API}/landlord/caretakers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: cName,
+          care_taker_email: cEmail,
+          phone_number: cPhone,
+          flat_no: cFlatNo,
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        setAddCaretakerError(data.detail || 'Could not add caretaker')
+        setAddCaretakerLoading(false)
+        return
+      }
+      setAddCaretakerSuccess(`Caretaker ${cName} added successfully.`)
+      setCName('')
+      setCEmail('')
+      setCPhone('')
+      setCFlatNo('')
+      setAddCaretakerLoading(false)
+    } catch (err) {
+      setAddCaretakerError('Could not reach the server. Please try again.')
+      setAddCaretakerLoading(false)
+    }
+  };
+
+  // Properties Data State (starts empty until a landlord adds a real property)
+  const [properties] = useState([])
+
+  // Units Data State
+  const [units] = useState([
+    { id: 1, unit: 'Flat 1A', property: 'Lekki Heights Estate', type: '2-Bed Apartment', tenant: 'Emeka Okafor', rent: '₦200,000', dueDate: '2024-08-01', status: 'Occupied' },
+    { id: 2, unit: 'Flat 1B', property: 'Lekki Heights Estate', type: '2-Bed Apartment', tenant: 'Ngozi Adeyemi', rent: '₦200,000', dueDate: '2024-07-15', status: 'Occupied' },
+    { id: 3, unit: 'Flat 2A', property: 'Lekki Heights Estate', type: '3-Bed Apartment', tenant: '—', rent: '₦280,000', dueDate: '—', status: 'Vacant' },
+    { id: 4, unit: 'Suite 101', property: 'Victoria Court', type: 'Penthouse', tenant: 'Babajide Sanwo', rent: '₦400,000', dueDate: '2024-08-10', status: 'Occupied' },
+    { id: 5, unit: 'Suite 102', property: 'Victoria Court', type: '3-Bed Apartment', tenant: 'Chiamaka Eze', rent: '₦350,000', dueDate: '2024-07-28', status: 'Occupied' },
+    { id: 6, unit: 'Shop A1', property: 'Surulere Plaza', type: 'Commercial', tenant: 'TechHub Ltd', rent: '₦180,000', dueDate: '2024-06-30', status: 'Overdue' }
+  ])
+
+  // Tenants Data State
+  const [tenants, setTenants] = useState([])
+  const [tenantsLoading, setTenantsLoading] = useState(true)
+  const [tenantsError, setTenantsError] = useState('')
+
+  const fetchTenants = async () => {
+    setTenantsLoading(true)
+    setTenantsError('')
+    try {
+      const response = await fetch(`${LANDLORD_API}/landlord/tenants`)
+      const data = await response.json()
+      if (!response.ok) {
+        setTenantsError('Could not load tenants')
+        setTenantsLoading(false)
+        return
+      }
+      const mapped = data.map(t => ({
+        id: t.id,
+        name: t.name,
+        email: t.tenant_email,
+        initials: (t.name || '').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase(),
+        unit: t.flat_no,
+        property: 'Unassigned',
+        rent: 'Not set',
+        balance: 'Not set',
+        balanceType: 'clear',
+        status: 'Current',
+        statusDate: t.date ? `Since ${t.date}` : '',
+      }))
+      setTenants(mapped)
+      setTenantsLoading(false)
+    } catch (err) {
+      setTenantsError('Could not reach the server. Please try again.')
+      setTenantsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchTenants()
+  }, [])
+
+  useEffect(() => {
+    if (currentUser?.role === 'Tenant' && currentUser?.tenant?.landlord_email) {
+      fetch(`${TENANT_API}/tenants/landlord/virtual-account/${currentUser.tenant.landlord_email}`)
+        .then(res => res.json())
+        .then(data => setLandlordVirtualAccount(data.virtual_account_number))
+        .catch(err => console.error('Failed to load landlord virtual account:', err))
+    }
+  }, [currentUser])
+
+
+  // Virtual Accounts Data State
+  const [virtualAccounts] = useState([
+    {
+      id: 1,
+      tenant: 'Emeka Okafor',
+      ref: 'RAAS-T001-P001',
+      accountNumber: '9038421765',
+      bank: 'Nomba / Wema Bank',
+      pendingBalance: '₦0',
+      totalCollected: '₦2,400,000',
+      status: 'Active'
+    },
+    {
+      id: 2,
+      tenant: 'Ngozi Adeyemi',
+      ref: 'RAAS-T002-P001',
+      accountNumber: '9038421766',
+      bank: 'Nomba / Wema Bank',
+      pendingBalance: '₦200,000',
+      totalCollected: '₦1,600,000',
+      status: 'Active'
+    },
+    {
+      id: 3,
+      tenant: 'Babajide Sanwo',
+      ref: 'RAAS-T003-P002',
+      accountNumber: '9038421770',
+      bank: 'Nomba / Wema Bank',
+      pendingBalance: '₦0',
+      totalCollected: '₦4,800,000',
+      status: 'Active'
+    },
+    {
+      id: 4,
+      tenant: 'Chiamaka Eze',
+      ref: 'RAAS-T004-P002',
+      accountNumber: '9038421771',
+      bank: 'Nomba / Wema Bank',
+      pendingBalance: '₦0',
+      totalCollected: '₦8,750,000',
+      status: 'Active'
+    },
+    {
+      id: 5,
+      tenant: 'TechHub Ltd',
+      ref: 'RAAS-T005-P003',
+      accountNumber: '9038421780',
+      bank: 'Nomba / Wema Bank',
+      pendingBalance: '₦0',
+      totalCollected: '₦1,620,000',
+      status: 'Suspended'
+    }
+  ])
+
+  // Payments Data State
+  const [payments] = useState([
+    { ref: '-7821934', tenant: 'Emeka Okafor', propertyUnit: 'Flat 1A', amount: '₦200,000', date: '2024-07-02', method: 'Virtual Account', status: 'Successful' },
+    { ref: '-7821800', tenant: 'Babajide Sanwo', propertyUnit: 'Suite 101', amount: '₦400,000', date: '2024-07-01', method: 'Virtual Account', status: 'Successful' },
+    { ref: '-7819450', tenant: 'Chiamaka Eze', propertyUnit: 'Suite 102', amount: '₦350,000', date: '2024-06-28', method: 'Virtual Account', status: 'Successful' },
+    { ref: '-7815200', tenant: 'Ngozi Adeyemi', propertyUnit: 'Flat 1B', amount: '₦200,000', date: '2024-06-15', method: 'Virtual Account', status: 'Pending' },
+    { ref: '-7800100', tenant: 'TechHub Ltd', propertyUnit: 'Shop A1', amount: '₦180,000', date: '2024-05-30', method: 'Virtual Account', status: 'Failed' },
+    { ref: '-7810500', tenant: 'Emeka Okafor', propertyUnit: 'Flat 1A', amount: '₦200,000', date: '2024-06-02', method: 'Virtual Account', status: 'Successful' }
+  ])
+
+  // Notifications State
+  const [notifications, setNotifications] = useState([
+    { id: 1, title: 'Rent Collected', message: '₦200,000 paid by Emeka Okafor for Flat 1A via virtual account.', time: '2 hours ago', type: 'success' },
+    { id: 2, title: 'Rent Due Soon', message: "Ngozi Adeyemi's rent for Flat 1B is due in 9 days.", time: '1 day ago', type: 'warning' },
+    { id: 3, title: 'Settlement Completed', message: '₦1,850,000 has been cleared and settled to your bank account.', time: '2 days ago', type: 'info' },
+    { id: 4, title: 'Defaulter Warning', message: "TechHub Ltd's rent for Shop A1 is overdue by 6 days.", time: '3 days ago', type: 'danger' }
+  ])
+
+  const dashboardStats = [
+    { label: 'Total Revenue', value: '₦0', change: 'No data yet', changeType: 'neutral', icon: '📈' },
+    { label: 'Occupancy Rate', value: '0%', change: 'No units yet', changeType: 'neutral', icon: '🏢' },
+    { label: 'Overdue Balance', value: '₦0', change: 'No data yet', changeType: 'neutral', icon: '⚠️' },
+    { label: 'Total Units', value: '0', change: 'No units yet', changeType: 'neutral', icon: '🏠' },
+  ]
+
+  const recentPayments = []
+
+  const navItems = [
+    { label: 'Dashboard', icon: '📊' },
+    { label: 'Properties', icon: '🏢' },
+    { label: 'Units', icon: '🏠' },
+    { label: 'Tenants', icon: '👥' },
+    { label: 'Virtual Accounts', icon: '💳' },
+    { label: 'Payment History', icon: '📋' },
+    { label: 'Reports', icon: '📈' },
+    { label: 'Notifications', icon: '🔔', badge: true },
+    { label: 'Settings', icon: '⚙️' },
+  ]
+
+  // Render Sub-Views
+  const renderProperties = () => {
+    const filteredProperties = properties.filter(p => 
+      p.name.toLowerCase().includes(propertySearch.toLowerCase()) || 
+      p.address.toLowerCase().includes(propertySearch.toLowerCase())
+    )
+
+    return (
+      <div className="properties-view animate-fade-in">
+        <div className="view-header-controls">
+          <div className="search-wrapper">
+            <span className="search-icon">🔍</span>
+            <input 
+              type="text" 
+              placeholder="Search properties..." 
+              value={propertySearch}
+              onChange={(e) => setPropertySearch(e.target.value)}
+            />
+          </div>
+          <div className="header-actions-right">
+            <button className="btn-filter">
+              <span className="filter-icon">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+                </svg>
+              </span>
+              Filter
+            </button>
+            <button className="btn-add-new">+ Add Property</button>
+          </div>
+        </div>
+
+        <div className="properties-grid animate-slide-up">
+          {filteredProperties.map(p => (
+            <div className="property-card" key={p.id}>
+              <div className="property-image-container">
+                <img src="/src/assets/property_house_keys.png" alt={p.name} className="property-img" />
+                <span className={`property-tag ${p.tag.toLowerCase()}`}>{p.tag}</span>
+              </div>
+              <div className="property-body">
+                <div className="property-info-header">
+                  <h3>{p.name}</h3>
+                  <button className="btn-card-menu">⋮</button>
+                </div>
+                <p className="property-address">
+                  <span className="pin-icon">📍</span> {p.address}
+                </p>
+                <div className="property-metrics">
+                  <div className="property-metric-col">
+                    <span className="metric-label">Units</span>
+                    <span className="metric-value">{p.units}</span>
+                  </div>
+                  <div className="property-metric-col">
+                    <span className="metric-label">Occupied</span>
+                    <span className="metric-value">{p.occupied}</span>
+                  </div>
+                  <div className="property-metric-col">
+                    <span className="metric-label">Revenue</span>
+                    <span className="metric-value">{p.revenue}</span>
+                  </div>
+                </div>
+                <div className="property-occupancy-wrapper">
+                  <div className="occupancy-label-row">
+                    <span>Occupancy</span>
+                    <span>{p.occupancy}%</span>
+                  </div>
+                  <div className="occupancy-progress-bar">
+                    <div className="occupancy-progress-fill" style={{ width: `${p.occupancy}%` }}></div>
+                  </div>
+                </div>
+                <div className="property-card-actions">
+                  <button className="btn-card-action view" onClick={() => setActiveTab('Units')}>
+                    <span className="action-icon-small">👁️</span> View Units
+                  </button>
+                  <button className="btn-card-action edit">
+                    <span className="action-icon-small">✏️</span> Edit
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+          {filteredProperties.length === 0 && (
+            <div className="no-results-msg">
+              {properties.length === 0
+                ? 'No properties yet. Click "+ Add Property" to get started.'
+                : 'No properties found matching your search.'}
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  const renderUnits = () => {
+    const filteredUnits = units.filter(u => {
+      if (unitFilter === 'All') return true
+      return u.status === unitFilter
+    })
+
+    return (
+      <div className="units-view animate-fade-in">
+        <div className="view-header-controls">
+          <div className="sub-tabs">
+            {['All', 'Occupied', 'Vacant', 'Overdue'].map((tab) => (
+              <button 
+                key={tab} 
+                className={`sub-tab ${unitFilter === tab ? 'active' : ''}`}
+                onClick={() => setUnitFilter(tab)}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+          <button className="btn-add-new">+ Add Unit</button>
+        </div>
+
+        <div className="table-card animate-slide-up">
+          <div className="table-responsive">
+            <table className="custom-data-table">
+              <thead>
+                <tr>
+                  <th>Unit</th>
+                  <th>Property</th>
+                  <th>Type</th>
+                  <th>Tenant</th>
+                  <th>Rent/Month</th>
+                  <th>Due Date</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredUnits.map(u => (
+                  <tr key={u.id}>
+                    <td className="bold-text">{u.unit}</td>
+                    <td>{u.property}</td>
+                    <td>{u.type}</td>
+                    <td>{u.tenant}</td>
+                    <td className="bold-text">{u.rent}</td>
+                    <td>{u.dueDate}</td>
+                    <td>
+                      <span className={`status-pill ${u.status.toLowerCase()}`}>{u.status}</span>
+                    </td>
+                    <td>
+                      <div className="table-actions">
+                        <button className="btn-table-icon" title="View">👁️</button>
+                        <button className="btn-table-icon" title="Edit">✏️</button>
+                        <button className="btn-table-icon delete" title="Delete">🗑️</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {filteredUnits.length === 0 && (
+                  <tr>
+                    <td colSpan="8" className="empty-table-msg">No units found in this category.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const renderTenantPortal = () => {
+    const tenant = loggedInUser || {}
+    const balance = tenant.balance || 0
+    const isOverdue = balance > 0
+
+    return (
+      <div className="animate-fade-in">
+        <div className="tenant-welcome-card">
+          <div className="tenant-welcome-left">
+            <div className="tenant-welcome-avatar">{initials}</div>
+            <div>
+              <h2>Welcome, {tenant.name}</h2>
+              <p>{tenant.flat_no}</p>
+            </div>
+          </div>
+          <div>
+            <span className="account-status-label">Account Status</span>
+            <div className={`account-status-value ${isOverdue ? 'overdue' : 'clear'}`}>
+              {isOverdue ? `₦${balance.toLocaleString()} Overdue` : 'Clear'}
+            </div>
+          </div>
+        </div>
+
+        <div className="virtual-account-card">
+          <p className="va-label">Your dedicated payment account &mdash; make all rent payments here</p>
+          {landlordVirtualAccount ? (
+            <>
+              <div className="virtual-account-number">{landlordVirtualAccount}</div>
+              <div className="virtual-account-meta">
+                <span>Nomba / Wema Bank</span>
+                <span>Reference: {tenant.id ? tenant.id.slice(-8).toUpperCase() : ''}</span>
+              </div>
+            </>
+          ) : (
+            <div className="virtual-account-number" style={{ fontSize: '1.1rem', opacity: 0.85 }}>
+              Virtual account setup pending
+            </div>
+          )}
+          <p className="virtual-account-note">Secured by Nomba. Transfer any amount and it will be applied to your rent automatically.</p>
+        </div>
+
+        <div className="tenant-info-grid">
+          <div className="tenant-info-card">
+            <div className="tenant-info-label">Monthly Rent</div>
+            <div className="tenant-info-value">
+              {tenant.monthly_rent ? `₦${tenant.monthly_rent.toLocaleString()}` : 'Not set'}
+            </div>
+          </div>
+          <div className="tenant-info-card">
+            <div className="tenant-info-label">Next Due Date</div>
+            <div className="tenant-info-value">{tenant.next_due_date || 'Not set'}</div>
+          </div>
+          <div className="tenant-info-card">
+            <div className="tenant-info-label">Lease Started</div>
+            <div className="tenant-info-value">{tenant.lease_start || 'Not set'}</div>
+          </div>
+        </div>
+
+        <div className="table-card" style={{ padding: '1.5rem' }}>
+          <h3 style={{ marginTop: 0, marginBottom: '1rem' }}>Payment History</h3>
+          <div className="no-results-msg">No payments recorded yet.</div>
+        </div>
+      </div>
+    )
+  }
+
+  const renderCaretakerDashboard = () => {
+    return (
+      <div className="animate-fade-in">
+        <div className="caretaker-stats-grid">
+          <div className="caretaker-stat-card">
+            <div className="caretaker-stat-value open">{maintenanceSummary.open}</div>
+            <div className="caretaker-stat-label">Open Tasks</div>
+          </div>
+          <div className="caretaker-stat-card">
+            <div className="caretaker-stat-value in-progress">{maintenanceSummary.in_progress}</div>
+            <div className="caretaker-stat-label">In Progress</div>
+          </div>
+          <div className="caretaker-stat-card">
+            <div className="caretaker-stat-value completed">{maintenanceSummary.completed}</div>
+            <div className="caretaker-stat-label">Completed</div>
+          </div>
+          <div className="caretaker-stat-card">
+            <div className="caretaker-stat-value">-</div>
+            <div className="caretaker-stat-label">Units Under Care</div>
+          </div>
+        </div>
+
+        <div className="table-card" style={{ padding: '1.5rem' }}>
+          <div className="view-header-controls" style={{ marginBottom: '1rem' }}>
+            <h3 style={{ margin: 0 }}>Maintenance Requests</h3>
+            <button className="btn-add-new" onClick={() => setShowReportIssueForm(!showReportIssueForm)}>
+              {showReportIssueForm ? 'Cancel' : '+ Report Issue'}
+            </button>
+          </div>
+
+          {showReportIssueForm && (
+            <div style={{ padding: '1rem', marginBottom: '1.5rem', border: '1px solid #E2E8F0', borderRadius: '10px' }}>
+              <form onSubmit={handleReportIssue}>
+                <div className="form-group">
+                  <label>Issue Title</label>
+                  <input type="text" value={riTitle} onChange={(e) => setRiTitle(e.target.value)} required />
+                </div>
+                <div className="form-row">
+                  <div className="form-group-half">
+                    <label>Priority</label>
+                    <select value={riPriority} onChange={(e) => setRiPriority(e.target.value)}>
+                      <option value="High">High</option>
+                      <option value="Medium">Medium</option>
+                      <option value="Low">Low</option>
+                    </select>
+                  </div>
+                  <div className="form-group-half">
+                    <label>Unit</label>
+                    <input type="text" value={riUnit} onChange={(e) => setRiUnit(e.target.value)} required />
+                  </div>
+                </div>
+                <div className="form-group">
+                  <label>Property Name</label>
+                  <input type="text" value={riPropertyName} onChange={(e) => setRiPropertyName(e.target.value)} required />
+                </div>
+                {riError && <p style={{ color: '#e53e3e', fontSize: '0.875rem', marginBottom: '1rem' }}>{riError}</p>}
+                {riSuccess && <p style={{ color: '#10B981', fontSize: '0.875rem', marginBottom: '1rem' }}>{riSuccess}</p>}
+                <button type="submit" className="btn-save-changes" disabled={riLoading}>
+                  {riLoading ? 'Reporting...' : 'Report Issue'}
+                </button>
+              </form>
+            </div>
+          )}
+
+          {maintenanceLoading && <div className="no-results-msg">Loading maintenance requests...</div>}
+          {!maintenanceLoading && maintenanceError && <div className="no-results-msg">{maintenanceError}</div>}
+          {!maintenanceLoading && !maintenanceError && maintenanceRequests.length === 0 && (
+            <div className="no-results-msg">No maintenance requests yet. Click "+ Report Issue" to add one.</div>
+          )}
+
+          {!maintenanceLoading && !maintenanceError && maintenanceRequests.map((req) => (
+            <div className="maintenance-request-card" key={req.id}>
+              <div className="mr-left">
+                <h4>{req.title}</h4>
+                <span className={`priority-badge ${req.priority.toLowerCase()}`}>{req.priority}</span>
+                <div className="mr-meta">{req.unit} &middot; {req.property_name} &middot; Reported {req.reported_date}</div>
+              </div>
+              <div className="mr-right">
+                <span className={`mr-status-badge ${req.status.toLowerCase().replace(' ', '-')}`}>{req.status}</span>
+                {req.status !== 'Completed' && (
+                  <select
+                    value={req.status}
+                    onChange={(e) => handleUpdateRequestStatus(req.id, e.target.value)}
+                  >
+                    <option value="Open">Open</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="Completed">Completed</option>
+                  </select>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+
+  const renderTenants = () => {
+    const filteredTenants = tenants.filter(t => 
+      t.name.toLowerCase().includes(tenantSearch.toLowerCase()) || 
+      t.email.toLowerCase().includes(tenantSearch.toLowerCase()) ||
+      t.property.toLowerCase().includes(tenantSearch.toLowerCase())
+    )
+
+    return (
+      <div className="tenants-view animate-fade-in">
+        <div className="view-header-controls">
+          <div className="search-wrapper">
+            <span className="search-icon">🔍</span>
+            <input 
+              type="text" 
+              placeholder="Search tenants..." 
+              value={tenantSearch}
+              onChange={(e) => setTenantSearch(e.target.value)}
+            />
+          </div>
+          <div style={{ display: 'flex', gap: '0.75rem' }}>
+            <button className="btn-add-new" onClick={() => setShowAddTenantForm(!showAddTenantForm)}>
+              {showAddTenantForm ? 'Cancel' : '+ Add Tenant'}
+            </button>
+            <button className="btn-add-new" onClick={() => setShowAddCaretakerForm(!showAddCaretakerForm)}>
+              {showAddCaretakerForm ? 'Cancel' : '+ Add Caretaker'}
+            </button>
+          </div>
+        </div>
+
+        {showAddTenantForm && (
+          <div className="table-card" style={{ padding: '1.5rem', marginBottom: '1.5rem' }}>
+            <h3 style={{ marginBottom: '1rem' }}>Add New Tenant</h3>
+            <form onSubmit={handleAddTenant}>
+              <div className="form-row">
+                <div className="form-group-half">
+                  <label>Name</label>
+                  <input type="text" value={tName} onChange={(e) => setTName(e.target.value)} required />
+                </div>
+                <div className="form-group-half">
+                  <label>Email</label>
+                  <input type="email" value={tEmail} onChange={(e) => setTEmail(e.target.value)} required />
+                </div>
+              </div>
+              <div className="form-row">
+                <div className="form-group-half">
+                  <label>Phone Number</label>
+                  <input type="text" value={tPhone} onChange={(e) => setTPhone(e.target.value)} required />
+                </div>
+                <div className="form-group-half">
+                  <label>Flat No.</label>
+                  <input type="text" value={tFlatNo} onChange={(e) => setTFlatNo(e.target.value)} required />
+                </div>
+              </div>
+              {addTenantError && <p style={{ color: '#e53e3e', fontSize: '0.875rem', marginBottom: '1rem' }}>{addTenantError}</p>}
+              {addTenantSuccess && <p style={{ color: '#10B981', fontSize: '0.875rem', marginBottom: '1rem' }}>{addTenantSuccess}</p>}
+              <button type="submit" className="btn-save-changes" disabled={addTenantLoading}>
+                {addTenantLoading ? 'Adding...' : 'Add Tenant'}
+              </button>
+            </form>
+          </div>
+        )}
+
+        {showAddCaretakerForm && (
+          <div className="table-card" style={{ padding: '1.5rem', marginBottom: '1.5rem' }}>
+            <h3 style={{ marginBottom: '1rem' }}>Add New Caretaker</h3>
+            <form onSubmit={handleAddCaretaker}>
+              <div className="form-row">
+                <div className="form-group-half">
+                  <label>Name</label>
+                  <input type="text" value={cName} onChange={(e) => setCName(e.target.value)} required />
+                </div>
+                <div className="form-group-half">
+                  <label>Email</label>
+                  <input type="email" value={cEmail} onChange={(e) => setCEmail(e.target.value)} required />
+                </div>
+              </div>
+              <div className="form-row">
+                <div className="form-group-half">
+                  <label>Phone Number</label>
+                  <input type="text" value={cPhone} onChange={(e) => setCPhone(e.target.value)} required />
+                </div>
+                <div className="form-group-half">
+                  <label>Flat No.</label>
+                  <input type="text" value={cFlatNo} onChange={(e) => setCFlatNo(e.target.value)} required />
+                </div>
+              </div>
+              {addCaretakerError && <p style={{ color: '#e53e3e', fontSize: '0.875rem', marginBottom: '1rem' }}>{addCaretakerError}</p>}
+              {addCaretakerSuccess && <p style={{ color: '#10B981', fontSize: '0.875rem', marginBottom: '1rem' }}>{addCaretakerSuccess}</p>}
+              <button type="submit" className="btn-save-changes" disabled={addCaretakerLoading}>
+                {addCaretakerLoading ? 'Adding...' : 'Add Caretaker'}
+              </button>
+            </form>
+          </div>
+        )}
+
+        {tenantsLoading && (
+          <div className="no-results-msg">Loading tenants...</div>
+        )}
+        {!tenantsLoading && tenantsError && (
+          <div className="no-results-msg">{tenantsError}</div>
+        )}
+        {!tenantsLoading && !tenantsError && filteredTenants.length === 0 && (
+          <div className="no-results-msg">
+            {tenants.length === 0
+              ? 'No tenants yet. Click "+ Add Tenant" to get started.'
+              : 'No tenants found matching your search.'}
+          </div>
+        )}
+        <div className="tenants-list animate-slide-up">
+          {filteredTenants.map(t => (
+            <div className="tenant-card" key={t.id}>
+              <div className="tenant-left">
+                <div className="tenant-avatar-circle">
+                  {t.initials}
+                </div>
+                <div className="tenant-profile-details">
+                  <div className="tenant-name-row">
+                    <h4>{t.name}</h4>
+                    <span className="tenant-email">{t.email}</span>
+                  </div>
+                  <div className="tenant-property-info">
+                    <span className="property-label-tag">Unit</span>
+                    <span className="property-value-text">{t.unit}</span>
+                    <span className="property-dot">•</span>
+                    <span className="property-name-text">{t.property}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="tenant-mid">
+                <div className="tenant-rent-block">
+                  <span className="block-label">Rent</span>
+                  <span className="block-val bold">{t.rent}</span>
+                </div>
+                <div className="tenant-balance-block">
+                  <span className="block-label">Balance</span>
+                  <span className={`block-val balance-text ${t.balanceType}`}>
+                    {t.balance}
+                  </span>
+                </div>
+              </div>
+
+              <div className="tenant-right">
+                <div className="tenant-status-block">
+                  <span className={`status-badge-custom ${t.status.toLowerCase()}`}>{t.status}</span>
+                  <span className="status-date-text">{t.statusDate}</span>
+                </div>
+                <div className="tenant-action-buttons">
+                  <button className="btn-tenant-action" title="Send Email">✉️</button>
+                  <button className="btn-tenant-action" title="Call">📞</button>
+                  <button className="btn-tenant-action" title="Edit">✏️</button>
+                </div>
+              </div>
+            </div>
+          ))}
+          {filteredTenants.length === 0 && (
+            <div className="no-results-msg">No tenants found matching your search.</div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  const renderVirtualAccounts = () => {
+    return (
+      <div className="virtual-accounts-view animate-fade-in">
+        <div className="va-banner">
+          <div className="va-banner-left">
+            <span className="va-banner-sub">Platform powered by</span>
+            <span className="va-banner-badge">Nomba API v2</span>
+            <div className="va-banner-stat">
+              <span className="stat-num">5</span>
+              <span className="stat-lbl">Active VAs</span>
+            </div>
+          </div>
+          <div className="va-banner-center">
+            <span className="stat-lbl">Total Collected</span>
+            <span className="stat-num">₦19.71M</span>
+          </div>
+          <div className="va-banner-right">
+            <span className="stat-lbl">Pending Settlement</span>
+            <span className="stat-num">₦740,000</span>
+          </div>
+        </div>
+
+        <div className="va-grid animate-slide-up">
+          {virtualAccounts.map(va => (
+            <div className={`va-card ${va.status.toLowerCase() === 'suspended' ? 'suspended' : ''}`} key={va.id}>
+              <div className="va-card-header">
+                <div className="va-card-title-group">
+                  <h4>{va.tenant}</h4>
+                  <span className="va-ref">{va.ref}</span>
+                </div>
+                <span className={`va-status-pill ${va.status.toLowerCase()}`}>{va.status}</span>
+              </div>
+
+              <div className="va-account-box">
+                <div className="va-box-left">
+                  <span className="va-box-label">Virtual Account Number</span>
+                  <span className="va-box-num">{va.accountNumber}</span>
+                  <span className="va-box-bank">{va.bank}</span>
+                </div>
+                <button 
+                  className="btn-copy-va" 
+                  onClick={() => handleCopy(va.accountNumber, va.id)}
+                  title="Copy Account Number"
+                >
+                  {copiedId === va.id ? '✅ Copied' : (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>
+                  )}
+                </button>
+              </div>
+
+              <div className="va-metrics">
+                <div className="va-metric-col">
+                  <span className="va-metric-lbl">Pending Balance</span>
+                  <span className="va-metric-val pending-color">{va.pendingBalance}</span>
+                </div>
+                <div className="va-metric-col">
+                  <span className="va-metric-lbl">Total Collected</span>
+                  <span className="va-metric-val">{va.totalCollected}</span>
+                </div>
+              </div>
+
+              <div className="va-card-actions">
+                <button className="btn-va-action refresh">
+                  <span className="icon">🔄</span> Refresh
+                </button>
+                <button className="btn-va-action details">
+                  <span className="icon">👁️</span> Details
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  const renderPaymentHistory = () => {
+    const filteredPayments = payments.filter(p => {
+      const matchesSearch = p.tenant.toLowerCase().includes(paymentSearch.toLowerCase()) || 
+                            p.ref.toLowerCase().includes(paymentSearch.toLowerCase()) ||
+                            p.propertyUnit.toLowerCase().includes(paymentSearch.toLowerCase())
+      
+      if (paymentFilter === 'All') return matchesSearch
+      return matchesSearch && p.status === paymentFilter
+    })
+
+    return (
+      <div className="payment-history-view animate-fade-in">
+        <div className="view-header-controls">
+          <div className="search-wrapper">
+            <span className="search-icon">🔍</span>
+            <input 
+              type="text" 
+              placeholder="Search by tenant or reference..." 
+              value={paymentSearch}
+              onChange={(e) => setPaymentSearch(e.target.value)}
+            />
+          </div>
+          <div className="payment-filters-group">
+            <div className="sub-tabs">
+              {['All', 'Successful', 'Pending', 'Failed'].map((tab) => (
+                <button 
+                  key={tab} 
+                  className={`sub-tab ${paymentFilter === tab ? 'active' : ''}`}
+                  onClick={() => setPaymentFilter(tab)}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+            <button className="btn-export-csv">
+              <span className="icon">📥</span> Export CSV
+            </button>
+          </div>
+        </div>
+
+        <div className="table-card animate-slide-up">
+          <div className="table-responsive">
+            <table className="custom-data-table">
+              <thead>
+                <tr>
+                  <th>Ref</th>
+                  <th>Tenant</th>
+                  <th>Property / Unit</th>
+                  <th>Amount</th>
+                  <th>Date</th>
+                  <th>Method</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredPayments.map((p, idx) => (
+                  <tr key={idx}>
+                    <td className="light-text">{p.ref}</td>
+                    <td className="bold-text">{p.tenant}</td>
+                    <td>{p.propertyUnit}</td>
+                    <td className="bold-text">{p.amount}</td>
+                    <td>{p.date}</td>
+                    <td>{p.method}</td>
+                    <td>
+                      <span className={`status-pill ${p.status.toLowerCase()}`}>{p.status}</span>
+                    </td>
+                    <td>
+                      <button className="btn-table-icon" title="Download Receipt">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                          <polyline points="7 10 12 15 17 10"></polyline>
+                          <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {filteredPayments.length === 0 && (
+                  <tr>
+                    <td colSpan="8" className="empty-table-msg">No payments found matching your filters.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const renderReports = () => {
+    return (
+      <div className="reports-view animate-fade-in">
+        <div className="view-header-controls">
+          <div className="sub-tabs">
+            {['Monthly', 'Quarterly', 'Yearly'].map((tab) => (
+              <button 
+                key={tab} 
+                className={`sub-tab ${reportsFilter === tab ? 'active' : ''}`}
+                onClick={() => setReportsFilter(tab)}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+          <button className="btn-export-csv">
+            <span className="icon">📥</span> Export Report
+          </button>
+        </div>
+
+        <div className="reports-stats-cards animate-slide-up">
+          <div className="report-stat-card">
+            <span className="rep-stat-label">Total Collected</span>
+            <span className="rep-stat-value">₦49.64M</span>
+            <span className="rep-stat-desc">Jan–Jul 2024</span>
+          </div>
+          <div className="report-stat-card">
+            <span className="rep-stat-label">Collection Rate</span>
+            <span className="rep-stat-value">96.4%</span>
+            <span className="rep-stat-desc positive">+3.2% vs last year</span>
+          </div>
+          <div className="report-stat-card">
+            <span className="rep-stat-label">Avg. Days to Pay</span>
+            <span className="rep-stat-value">2.3 days</span>
+            <span className="rep-stat-desc text-muted">from due date</span>
+          </div>
+          <div className="report-stat-card">
+            <span className="rep-stat-label">Defaulter Rate</span>
+            <span className="rep-stat-value">3.6%</span>
+            <span className="rep-stat-desc negative">2 tenants</span>
+          </div>
+        </div>
+
+        <div className="reports-charts-grid animate-slide-up">
+          <div className="chart-card large-chart">
+            <h3>Revenue by Month</h3>
+            <div className="chart-container">
+              <svg viewBox="0 0 800 250" className="bar-chart-svg">
+                <line x1="60" y1="30" x2="760" y2="30" stroke="#F1F5F9" strokeWidth="1" />
+                <line x1="60" y1="75" x2="760" y2="75" stroke="#F1F5F9" strokeWidth="1" />
+                <line x1="60" y1="120" x2="760" y2="120" stroke="#F1F5F9" strokeWidth="1" strokeDasharray="3 3" />
+                <line x1="60" y1="165" x2="760" y2="165" stroke="#F1F5F9" strokeWidth="1" strokeDasharray="3 3" />
+                <line x1="60" y1="210" x2="760" y2="210" stroke="#E2E8F0" strokeWidth="1.5" />
+
+                <text x="45" y="34" textAnchor="end" fill="#94A3B8" fontSize="11">₦8.0M</text>
+                <text x="45" y="79" textAnchor="end" fill="#94A3B8" fontSize="11">₦6.0M</text>
+                <text x="45" y="124" textAnchor="end" fill="#94A3B8" fontSize="11">₦4.0M</text>
+                <text x="45" y="169" textAnchor="end" fill="#94A3B8" fontSize="11">₦2.0M</text>
+                <text x="45" y="214" textAnchor="end" fill="#94A3B8" fontSize="11">₦0.0M</text>
+
+                {/* Jan */}
+                <rect x="110" y="80" width="30" height="130" rx="4" fill="#1D5BFF" />
+                <rect x="142" y="198" width="10" height="12" rx="2" fill="#E2E8F0" />
+                <text x="131" y="230" textAnchor="middle" fill="#94A3B8" fontSize="11" fontWeight="600">Jan</text>
+
+                {/* Feb */}
+                <rect x="210" y="60" width="30" height="150" rx="4" fill="#1D5BFF" />
+                <rect x="242" y="196" width="10" height="14" rx="2" fill="#E2E8F0" />
+                <text x="231" y="230" textAnchor="middle" fill="#94A3B8" fontSize="11" fontWeight="600">Feb</text>
+
+                {/* Mar */}
+                <rect x="310" y="70" width="30" height="140" rx="4" fill="#1D5BFF" />
+                <rect x="342" y="194" width="10" height="16" rx="2" fill="#E2E8F0" />
+                <text x="331" y="230" textAnchor="middle" fill="#94A3B8" fontSize="11" fontWeight="600">Mar</text>
+
+                {/* Apr */}
+                <rect x="410" y="50" width="30" height="160" rx="4" fill="#1D5BFF" />
+                <rect x="442" y="198" width="10" height="12" rx="2" fill="#E2E8F0" />
+                <text x="431" y="230" textAnchor="middle" fill="#94A3B8" fontSize="11" fontWeight="600">Apr</text>
+
+                {/* May */}
+                <rect x="510" y="38" width="30" height="172" rx="4" fill="#1D5BFF" />
+                <rect x="542" y="198" width="10" height="12" rx="2" fill="#E2E8F0" />
+                <text x="531" y="230" textAnchor="middle" fill="#94A3B8" fontSize="11" fontWeight="600">May</text>
+
+                {/* Jun */}
+                <rect x="610" y="34" width="30" height="176" rx="4" fill="#1D5BFF" />
+                <rect x="642" y="199" width="10" height="11" rx="2" fill="#E2E8F0" />
+                <text x="631" y="230" textAnchor="middle" fill="#94A3B8" fontSize="11" fontWeight="600">Jun</text>
+              </svg>
+            </div>
+            <div className="chart-legend">
+              <div className="legend-item">
+                <span className="legend-dot blue"></span>
+                <span>Virtual Account</span>
+              </div>
+              <div className="legend-item">
+                <span className="legend-dot light-gray"></span>
+                <span>Manual</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="chart-card large-chart">
+            <h3>Collection Trend</h3>
+            <div className="chart-container">
+              <svg viewBox="0 0 800 250" className="line-chart-svg">
+                <line x1="60" y1="30" x2="760" y2="30" stroke="#F1F5F9" strokeWidth="1" />
+                <line x1="60" y1="75" x2="760" y2="75" stroke="#F1F5F9" strokeWidth="1" />
+                <line x1="60" y1="120" x2="760" y2="120" stroke="#F1F5F9" strokeWidth="1" strokeDasharray="3 3" />
+                <line x1="60" y1="165" x2="760" y2="165" stroke="#F1F5F9" strokeWidth="1" strokeDasharray="3 3" />
+                <line x1="60" y1="210" x2="760" y2="210" stroke="#E2E8F0" strokeWidth="1.5" />
+
+                <text x="45" y="34" textAnchor="end" fill="#94A3B8" fontSize="11">₦10.0M</text>
+                <text x="45" y="79" textAnchor="end" fill="#94A3B8" fontSize="11">₦7.5M</text>
+                <text x="45" y="124" textAnchor="end" fill="#94A3B8" fontSize="11">₦5.0M</text>
+                <text x="45" y="169" textAnchor="end" fill="#94A3B8" fontSize="11">₦2.5M</text>
+                <text x="45" y="214" textAnchor="end" fill="#94A3B8" fontSize="11">₦0.0M</text>
+
+                <defs>
+                  <linearGradient id="trendGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#10B981" stopOpacity="0.15" />
+                    <stop offset="100%" stopColor="#10B981" stopOpacity="0" />
+                  </linearGradient>
+                </defs>
+                
+                <path 
+                  d="M110 140 L210 125 L310 130 L410 115 L510 105 L610 103 L710 105" 
+                  fill="none" 
+                  stroke="#10B981" 
+                  strokeWidth="3.5" 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round" 
+                />
+                
+                <path 
+                  d="M110 140 L210 125 L310 130 L410 115 L510 105 L610 103 L710 105 L710 210 L110 210 Z" 
+                  fill="url(#trendGradient)" 
+                />
+
+                <circle cx="110" cy="140" r="5" fill="#10B981" stroke="white" strokeWidth="1.5" />
+                <circle cx="210" cy="125" r="5" fill="#10B981" stroke="white" strokeWidth="1.5" />
+                <circle cx="310" cy="130" r="5" fill="#10B981" stroke="white" strokeWidth="1.5" />
+                <circle cx="410" cy="115" r="5" fill="#10B981" stroke="white" strokeWidth="1.5" />
+                <circle cx="510" cy="105" r="5" fill="#10B981" stroke="white" strokeWidth="1.5" />
+                <circle cx="610" cy="103" r="5" fill="#10B981" stroke="white" strokeWidth="1.5" />
+                <circle cx="710" cy="105" r="5" fill="#10B981" stroke="white" strokeWidth="1.5" />
+
+                <text x="110" y="232" textAnchor="middle" fill="#94A3B8" fontSize="11" fontWeight="600">Jan</text>
+                <text x="210" y="232" textAnchor="middle" fill="#94A3B8" fontSize="11" fontWeight="600">Feb</text>
+                <text x="310" y="232" textAnchor="middle" fill="#94A3B8" fontSize="11" fontWeight="600">Mar</text>
+                <text x="410" y="232" textAnchor="middle" fill="#94A3B8" fontSize="11" fontWeight="600">Apr</text>
+                <text x="510" y="232" textAnchor="middle" fill="#94A3B8" fontSize="11" fontWeight="600">May</text>
+                <text x="610" y="232" textAnchor="middle" fill="#94A3B8" fontSize="11" fontWeight="600">Jun</text>
+                <text x="710" y="232" textAnchor="middle" fill="#94A3B8" fontSize="11" fontWeight="600">Jul</text>
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <div className="reports-bottom-section animate-slide-up">
+          <div className="table-card">
+            <div className="revenue-property-header">
+              <h3>Revenue by Property</h3>
+            </div>
+            <div className="table-responsive">
+              <table className="custom-data-table">
+                <thead>
+                  <tr>
+                    <th>Property</th>
+                    <th>Collected</th>
+                    <th>Share</th>
+                    <th>Occupancy</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td className="bold-text">Victoria Court</td>
+                    <td className="bold-text">₦3.20M</td>
+                    <td>
+                      <div className="share-bar-container">
+                        <div className="share-bar-fill" style={{ width: '40%', background: '#1D5BFF' }}></div>
+                        <span className="share-text">40%</span>
+                      </div>
+                    </td>
+                    <td><span className="status-pill occupied">100%</span></td>
+                  </tr>
+                  <tr>
+                    <td className="bold-text">Lekki Heights Estate</td>
+                    <td className="bold-text">₦2.40M</td>
+                    <td>
+                      <div className="share-bar-container">
+                        <div className="share-bar-fill" style={{ width: '30%', background: '#10B981' }}></div>
+                        <span className="share-text">30%</span>
+                      </div>
+                    </td>
+                    <td><span className="status-pill occupied">83%</span></td>
+                  </tr>
+                  <tr>
+                    <td className="bold-text">Gbagada Green</td>
+                    <td className="bold-text">₦1.70M</td>
+                    <td>
+                      <div className="share-bar-container">
+                        <div className="share-bar-fill" style={{ width: '21%', background: '#F59E0B' }}></div>
+                        <span className="share-text">21%</span>
+                      </div>
+                    </td>
+                    <td><span className="status-pill occupied">85%</span></td>
+                  </tr>
+                  <tr>
+                    <td className="bold-text">Surulere Plaza</td>
+                    <td className="bold-text">₦0.72M</td>
+                    <td>
+                      <div className="share-bar-container">
+                        <div className="share-bar-fill" style={{ width: '9%', background: '#6B7280' }}></div>
+                        <span className="share-text">9%</span>
+                      </div>
+                    </td>
+                    <td><span className="status-pill vacant">67%</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const renderSettings = () => {
+    return (
+      <div className="settings-view animate-fade-in">
+        {showSaveToast && (
+          <div className="save-toast-notification">
+            <span>✓ Settings saved successfully!</span>
+          </div>
+        )}
+
+        <div className="settings-layout">
+          <div className="settings-sidebar">
+            {['Profile', 'Security', 'Notifications', 'Billing', 'API Keys'].map((tab) => (
+              <button
+                key={tab}
+                className={`settings-sidebar-tab ${settingsTab === tab ? 'active' : ''}`}
+                onClick={() => setSettingsTab(tab)}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+
+          <div className="settings-content-panel">
+            {settingsTab === 'Profile' && (
+              <div className="profile-settings-form animate-fade-in">
+                <h3>Profile Information</h3>
+                <p className="panel-subtitle">Update your personal details</p>
+
+                <div className="avatar-section">
+                  <div className="avatar-circle-large">{initials}</div>
+                  <button className="btn-change-avatar">Change Avatar</button>
+                </div>
+
+                <form onSubmit={handleSaveSettings} className="settings-form">
+                  <div className="form-row">
+                    <div className="form-group-half">
+                      <label>First Name</label>
+                      <input 
+                        type="text" 
+                        value={profileFirstName}
+                        onChange={(e) => setProfileFirstName(e.target.value)}
+                      />
+                    </div>
+                    <div className="form-group-half">
+                      <label>Last Name</label>
+                      <input 
+                        type="text" 
+                        value={profileLastName}
+                        onChange={(e) => setProfileLastName(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-row">
+                    <div className="form-group-half">
+                      <label>Email</label>
+                      <input 
+                        type="email" 
+                        value={profileEmail}
+                        onChange={(e) => setProfileEmail(e.target.value)}
+                      />
+                    </div>
+                    <div className="form-group-half">
+                      <label>Phone</label>
+                      <input 
+                        type="text" 
+                        value={profilePhone}
+                        onChange={(e) => setProfilePhone(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-row">
+                    <div className="form-group-half">
+                      <label>Company</label>
+                      <input 
+                        type="text" 
+                        value={profileCompany}
+                        onChange={(e) => setProfileCompany(e.target.value)}
+                      />
+                    </div>
+                    <div className="form-group-half">
+                      <label>Address</label>
+                      <input 
+                        type="text" 
+                        value={profileAddress}
+                        onChange={(e) => setProfileAddress(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <button type="submit" className="btn-save-changes">Save Changes</button>
+                </form>
+
+                <div className="settings-form" style={{ marginTop: '2rem', paddingTop: '2rem', borderTop: '1px solid #E2E8F0' }}>
+                  <h3>Payment Settings</h3>
+                  <p className="panel-subtitle">Set the virtual account tenants will pay rent into</p>
+                  <form onSubmit={handleSaveVirtualAccount}>
+                    <div className="form-group-full">
+                      <label>Virtual Account Number</label>
+                      <input
+                        type="text"
+                        value={vaNumberInput}
+                        onChange={(e) => setVaNumberInput(e.target.value)}
+                        placeholder="Enter virtual account number"
+                        required
+                      />
+                    </div>
+                    {vaError && <p style={{ color: '#e53e3e', fontSize: '0.875rem', marginBottom: '1rem' }}>{vaError}</p>}
+                    {vaSuccess && <p style={{ color: '#10B981', fontSize: '0.875rem', marginBottom: '1rem' }}>{vaSuccess}</p>}
+                    <button type="submit" className="btn-save-changes" disabled={vaLoading}>
+                      {vaLoading ? 'Saving...' : 'Save Virtual Account'}
+                    </button>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            {settingsTab === 'Security' && (
+              <div className="security-settings-form animate-fade-in">
+                <h3>Security Settings</h3>
+                <p className="panel-subtitle">Manage your password and security credentials</p>
+
+                <form onSubmit={handleSaveSettings} className="settings-form">
+                  <div className="form-group-full">
+                    <label>Current Password</label>
+                    <input type="password" placeholder="••••••••" />
+                  </div>
+                  <div className="form-group-full">
+                    <label>New Password</label>
+                    <input type="password" placeholder="••••••••" />
+                  </div>
+                  <div className="form-group-full">
+                    <label>Confirm New Password</label>
+                    <input type="password" placeholder="••••••••" />
+                  </div>
+
+                  <div className="security-toggles">
+                    <div className="toggle-group">
+                      <div className="toggle-info">
+                        <strong>Two-Factor Authentication (2FA)</strong>
+                        <p>Secure your account with a verification code sent to your mobile phone.</p>
+                      </div>
+                      <input type="checkbox" className="switch-input" defaultChecked />
+                    </div>
+                  </div>
+
+                  <button type="submit" className="btn-save-changes">Save Password</button>
+                </form>
+              </div>
+            )}
+
+            {settingsTab === 'Notifications' && (
+              <div className="notifications-settings-form animate-fade-in">
+                <h3>Notification Preferences</h3>
+                <p className="panel-subtitle">Choose how you receive alerts and reports</p>
+
+                <form onSubmit={handleSaveSettings} className="settings-form">
+                  <div className="checkbox-list">
+                    <label className="checkbox-item">
+                      <input type="checkbox" defaultChecked />
+                      <div className="checkbox-label-info">
+                        <strong>Payment Collections</strong>
+                        <p>Receive alerts when tenants pay through their virtual accounts.</p>
+                      </div>
+                    </label>
+                    <label className="checkbox-item">
+                      <input type="checkbox" defaultChecked />
+                      <div className="checkbox-label-info">
+                        <strong>Overdue Alerts</strong>
+                        <p>Receive notifications when rent is past the due date.</p>
+                      </div>
+                    </label>
+                    <label className="checkbox-item">
+                      <input type="checkbox" defaultChecked />
+                      <div className="checkbox-label-info">
+                        <strong>Monthly Reports</strong>
+                        <p>Receive a summary of collections and occupancy at the end of each month.</p>
+                      </div>
+                    </label>
+                    <label className="checkbox-item">
+                      <input type="checkbox" />
+                      <div className="checkbox-label-info">
+                        <strong>Nomba Settlement Alerts</strong>
+                        <p>Notify when funds are cleared and deposited into your primary bank account.</p>
+                      </div>
+                    </label>
+                  </div>
+
+                  <button type="submit" className="btn-save-changes">Save Preferences</button>
+                </form>
+              </div>
+            )}
+
+            {settingsTab === 'Billing' && (
+              <div className="billing-settings-form animate-fade-in">
+                <h3>Subscription & Billing</h3>
+                <p className="panel-subtitle">Manage your plan and invoices</p>
+
+                <div className="billing-current-plan">
+                  <div className="plan-info-left">
+                    <span className="badge-plan">ACTIVE PLAN</span>
+                    <h4>Growth Plan</h4>
+                    <p>Up to 100 units managed · ₦24,900/month</p>
+                  </div>
+                  <button className="btn-change-plan">Upgrade Plan</button>
+                </div>
+
+                <div className="billing-card-info">
+                  <h4>Payment Method</h4>
+                  <div className="card-row">
+                    <span className="card-icon">💳</span>
+                    <div className="card-details">
+                      <strong>Visa ending in 4242</strong>
+                      <p>Expires 12/27</p>
+                    </div>
+                    <button className="btn-edit-payment">Edit</button>
+                  </div>
+                </div>
+
+                <button type="button" className="btn-save-changes" onClick={() => alert('Billing settings updated!')}>Update Billing Details</button>
+              </div>
+            )}
+
+            {settingsTab === 'API Keys' && (
+              <div className="api-settings-form animate-fade-in">
+                <h3>API Keys</h3>
+                <p className="panel-subtitle">Access keys for building custom integrations</p>
+
+                <div className="api-keys-list">
+                  <div className="api-key-block">
+                    <div className="key-header">
+                      <strong>Public Key (Live)</strong>
+                      <span className="key-badge">Active</span>
+                    </div>
+                    <div className="key-value-row">
+                      <input type="text" readOnly value="pk_live_51Ny87eH1Qv83fjsd88A" className="api-key-input" />
+                      <button className="btn-copy-key" onClick={() => handleCopy('pk_live_51Ny87eH1Qv83fjsd88A', 'api-pk')}>
+                        {copiedId === 'api-pk' ? '✅ Copied' : 'Copy'}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="api-key-block">
+                    <div className="key-header">
+                      <strong>Secret Key (Live)</strong>
+                      <span className="key-badge warning">Sensitive</span>
+                    </div>
+                    <div className="key-value-row">
+                      <input type="password" readOnly value="sk_live_51Ny87eH1Qv83fjsd88A" className="api-key-input" />
+                      <button className="btn-copy-key" onClick={() => handleCopy('sk_live_51Ny87eH1Qv83fjsd88A', 'api-sk')}>
+                        {copiedId === 'api-sk' ? '✅ Copied' : 'Copy'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <button className="btn-generate-key" onClick={() => alert('New test key generated!')}>Generate New Test Key</button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const renderNotifications = () => {
+    return (
+      <div className="notifications-view animate-fade-in">
+        <div className="view-header-controls">
+          <h3>Recent Notifications</h3>
+          <button className="btn-filter" onClick={() => setNotifications([])}>Clear All</button>
+        </div>
+        <div className="notifications-list animate-slide-up">
+          {notifications.map(n => (
+            <div className={`notification-item-card ${n.type}`} key={n.id}>
+              <div className="notification-icon-indicator">
+                {n.type === 'success' && '✅'}
+                {n.type === 'warning' && '⚠️'}
+                {n.type === 'info' && 'ℹ️'}
+                {n.type === 'danger' && '🚨'}
+              </div>
+              <div className="notification-body-content">
+                <h4>{n.title}</h4>
+                <p>{n.message}</p>
+                <span className="notification-time">{n.time}</span>
+              </div>
+            </div>
+          ))}
+          {notifications.length === 0 && (
+            <div className="fallback-card">
+              <div className="fallback-icon">🔔</div>
+              <h2>All Caught Up!</h2>
+              <p>You have no unread notifications.</p>
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  if (currentPage === 'login') {
+    return (
+      <div className="app">
+        <div className="login-page">
+          <div className="login-left">
+            <div className="login-logo">
+              <div className="logo-icon">R</div>
+              <span>RaaS</span>
+            </div>
+            <div className="login-headline">
+              <h2>Automate rent.</h2>
+              <h2>Eliminate chasing.</h2>
+            </div>
+            <div className="login-features">
+              <div className="login-feature-item">
+                <span className="checkmark">✓</span>
+                <span>Dedicated virtual account per tenant</span>
+              </div>
+              <div className="login-feature-item">
+                <span className="checkmark">✓</span>
+                <span>Instant payment notifications</span>
+              </div>
+              <div className="login-feature-item">
+                <span className="checkmark">✓</span>
+                <span>Automatic receipt generation</span>
+              </div>
+              <div className="login-feature-item">
+                <span className="checkmark">✓</span>
+                <span>Real-time analytics dashboard</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="login-right">
+            <div className="login-form-container">
+              <h3 className="login-title">Welcome back</h3>
+              <p className="login-subtitle">Signin to your RaaS workspace</p>
+
+              <div className="user-type-tabs">
+                {['Landlord', 'Tenant', 'Caretaker'].map((type) => (
+                  <button
+                    key={type}
+                    className={`tab ${userType === type ? 'active' : ''}`}
+                    onClick={() => setUserType(type)}
+                  >
+                    {type}
+                  </button>
+                ))}
+              </div>
+
+              <form onSubmit={handleLogin}>
+                <div className="form-group">
+                  <label>Email Address</label>
+                  <input
+                    type="email"
+                    placeholder="you@example.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Password</label>
+                  <input
+                    type="password"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                </div>
+
+                {loginError && (
+                  <p className="login-error-msg" style={{ color: '#e53e3e', fontSize: '0.875rem', marginBottom: '1rem' }}>
+                    {loginError}
+                  </p>
+                )}
+
+                <button type="submit" className="btn-signin-submit" disabled={loginLoading}>
+                  {loginLoading ? 'Signing in...' : 'Sign in →'}
+                </button>
+              </form>
+
+              {(userType === 'Tenant' || userType === 'Caretaker') && (
+                <p className="signup-link">
+                  First time logging in?{' '}
+                  <a href="#" onClick={(e) => { e.preventDefault(); setShowSetPasswordForm(!showSetPasswordForm); }}>
+                    {showSetPasswordForm ? 'Back to sign in' : 'Set your password'}
+                  </a>
+                </p>
+              )}
+
+              {(userType === 'Tenant' || userType === 'Caretaker') && showSetPasswordForm && (
+                <form onSubmit={handleSetPassword} style={{ marginTop: '1rem', borderTop: '1px solid #E2E8F0', paddingTop: '1rem' }}>
+                  <div className="form-group">
+                    <label>Email Address</label>
+                    <input
+                      type="email"
+                      placeholder="you@example.com"
+                      value={spIdentifier}
+                      onChange={(e) => setSpIdentifier(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>New Password</label>
+                    <input
+                      type="password"
+                      placeholder="••••••••"
+                      value={spNewPassword}
+                      onChange={(e) => setSpNewPassword(e.target.value)}
+                      required
+                    />
+                  </div>
+                  {spError && <p style={{ color: '#e53e3e', fontSize: '0.875rem', marginBottom: '1rem' }}>{spError}</p>}
+                  {spSuccess && <p style={{ color: '#10B981', fontSize: '0.875rem', marginBottom: '1rem' }}>{spSuccess}</p>}
+                  <button type="submit" className="btn-signin-submit" disabled={spLoading}>
+                    {spLoading ? 'Setting password...' : 'Set Password'}
+                  </button>
+                </form>
+              )}
+
+              {userType === 'Landlord' && (
+                <p className="signup-link">
+                  Don't have an account? <a href="#signup" onClick={(e) => { e.preventDefault(); setCurrentPage('signup'); }}>Sign up</a>
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (currentPage === 'signup') {
+    return (
+      <div className="app">
+        <div className="login-page">
+          <div className="login-left">
+            <div className="login-logo" onClick={() => setCurrentPage('landing')} style={{ cursor: 'pointer' }}>
+              <div className="logo-icon">R</div>
+              <span>RaaS</span>
+            </div>
+            <div className="login-headline">
+              <h2>Automate rent.</h2>
+              <h2>Eliminate chasing.</h2>
+            </div>
+            <div className="login-features">
+              <div className="login-feature-item">
+                <span className="checkmark-circle">✓</span>
+                <span>Dedicated virtual account per tenant</span>
+              </div>
+              <div className="login-feature-item">
+                <span className="checkmark-circle">✓</span>
+                <span>Instant payment notifications</span>
+              </div>
+              <div className="login-feature-item">
+                <span className="checkmark-circle">✓</span>
+                <span>Automatic receipt generation</span>
+              </div>
+              <div className="login-feature-item">
+                <span className="checkmark-circle">✓</span>
+                <span>Real-time analytics dashboard</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="login-right">
+            <div className="login-form-container">
+              <h3 className="login-title">Create your account</h3>
+              <p className="login-subtitle">Start automating rent collection for free</p>
+
+              <div className="segmented-control">
+                {['Landlord', 'Tenant', 'Caretaker'].map((type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    className={`segmented-tab ${userType === type ? 'active' : ''}`}
+                    onClick={() => setUserType(type)}
+                  >
+                    {type}
+                  </button>
+                ))}
+              </div>
+
+              <form onSubmit={handleSignup}>
+                <div className="form-row">
+                  <div className="form-group-half">
+                    <label>First Name</label>
+                    <input
+                      type="text"
+                      placeholder="Emeka"
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="form-group-half">
+                    <label>Last Name</label>
+                    <input
+                      type="text"
+                      placeholder="Okafor"
+                      value={lastName}
+                      onChange={(e) => setLastName(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label>Email Address</label>
+                  <input
+                    type="email"
+                    placeholder="you@example.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Phone Number</label>
+                  <input
+                    type="text"
+                    placeholder="08012345678"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Password</label>
+                  <input
+                    type="password"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                  />
+                </div>
+
+                {loginError && <p style={{ color: '#e53e3e', fontSize: '0.875rem', marginBottom: '1rem' }}>{loginError}</p>}
+                <button type="submit" className="btn-signin-submit" disabled={loginLoading}>
+                  {loginLoading ? 'Creating account...' : 'Create account'}
+                </button>
+              </form>
+
+              <p className="signup-link">
+                Already have an account? <a href="#login" onClick={(e) => { e.preventDefault(); setCurrentPage('login'); }}>Sign in</a>
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (currentPage === 'dashboard') {
+    return (
+      <div className="app">
+        <div className="dashboard-container">
+          <aside className={`dashboard-sidebar ${sidebarOpen ? 'open' : 'closed'}`}>
+            <div className="sidebar-header">
+              <div className="sidebar-logo">
+                <div className="logo-icon">R</div>
+                <span className={sidebarOpen ? '' : 'hidden'}>RaaS</span>
+              </div>
+            </div>
+
+            <nav className="sidebar-nav">
+              {navItems
+                .filter((item) =>
+                  currentUser?.role === 'Landlord'
+                    ? true
+                    : ['Dashboard', 'Reports', 'Notifications', 'Settings'].includes(item.label)
+                )
+                .map((item, idx) => (
+                <a 
+                  key={idx} 
+                  href="#" 
+                  className={`nav-item ${item.label === activeTab ? 'active' : ''}`}
+                  onClick={(e) => { e.preventDefault(); setActiveTab(item.label); }}
+                >
+                  <span className="nav-icon">{item.icon}</span>
+                  {sidebarOpen && (
+                    <>
+                      <span className="nav-label">{item.label}</span>
+                      {item.badge && item.label === 'Notifications' && notifications.length > 0 && (
+                        <span className="nav-badge">{notifications.length}</span>
+                      )}
+                    </>
+                  )}
+                </a>
+              ))}
+            </nav>
+
+            <div className="sidebar-footer">
+              <button className="collapse-btn" onClick={() => setSidebarOpen(!sidebarOpen)}>
+                <span>{sidebarOpen ? 'Collapse' : 'Expand'}</span>
+              </button>
+              <button className="signout-btn" onClick={() => { setCurrentPage('landing'); setActiveTab('Dashboard'); }}>
+                <span>Sign out</span>
+              </button>
+            </div>
+          </aside>
+
+          <main className="dashboard-main">
+            <div className="dashboard-header">
+              <h1>{activeTab}</h1>
+              <div className="dashboard-top-right">
+                <button className="notification-btn" onClick={() => setActiveTab('Notifications')}>
+                  🔔
+                  {notifications.length > 0 && <span className="notification-badge-dot"></span>}
+                </button>
+                <div className="user-profile" onClick={() => setActiveTab('Settings')} style={{ cursor: 'pointer' }}>
+                  <div className="profile-avatar">{initials}</div>
+                  <div className="profile-info">
+                    <div className="profile-name">{displayName}</div>
+                    <div className="profile-role">{currentUser?.role}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="dashboard-content">
+              {activeTab === 'Dashboard' && (currentUser?.role === 'Landlord' ? (
+                <div className="animate-fade-in">
+                  <div className="stats-cards">
+                    {dashboardStats.map((stat, idx) => (
+                      <div key={idx} className="stat-card">
+                        <div className="stat-header">
+                          <span className="stat-label">{stat.label}</span>
+                          <span className="stat-icon">{stat.icon}</span>
+                        </div>
+                        <div className="stat-value">{stat.value}</div>
+                        <div className={`stat-change ${stat.changeType}`}>{stat.change}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="charts-section">
+                    <div className="chart-card">
+                      <h3>Revenue vs Target</h3>
+                      <p className="chart-date">Jan - Jul 2024</p>
+                      <svg viewBox="0 0 800 200" className="line-chart">
+                        <defs>
+                          <linearGradient id="chartGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" stopColor="#1D5BFF" stopOpacity="0.3" />
+                            <stop offset="100%" stopColor="#1D5BFF" stopOpacity="0" />
+                          </linearGradient>
+                        </defs>
+                        <polyline points="0,150 100,140 200,130 300,125 400,120 500,115 600,110 700,100 800,90" fill="none" stroke="#1D5BFF" strokeWidth="3" />
+                        <polygon points="0,150 100,140 200,130 300,125 400,120 500,115 600,110 700,100 800,90 800,200 0,200" fill="url(#chartGradient)" />
+                        <text x="50" y="40" fill="#999" fontSize="12">₦10.0M</text>
+                        <text x="50" y="80" fill="#999" fontSize="12">₦7.5M</text>
+                        <text x="50" y="120" fill="#999" fontSize="12">₦5.0M</text>
+                        <text x="50" y="160" fill="#999" fontSize="12">₦0.0M</text>
+                        <text x="0" y="185" fill="#999" fontSize="12">Feb</text>
+                        <text x="100" y="185" fill="#999" fontSize="12">Mar</text>
+                        <text x="200" y="185" fill="#999" fontSize="12">Apr</text>
+                        <text x="300" y="185" fill="#999" fontSize="12">May</text>
+                        <text x="400" y="185" fill="#999" fontSize="12">Jun</text>
+                        <text x="500" y="185" fill="#999" fontSize="12">Jul</text>
+                      </svg>
+                    </div>
+
+                    <div className="chart-card occupancy-card">
+                      <h3>Occupancy Breakdown</h3>
+                      <svg viewBox="0 0 200 200" className="donut-chart">
+                        <circle cx="100" cy="100" r="70" fill="none" stroke="#1D5BFF" strokeWidth="30" strokeDasharray="173 301" strokeDashoffset="0" />
+                        <circle cx="100" cy="100" r="70" fill="none" stroke="#FF6B6B" strokeWidth="30" strokeDasharray="44 301" strokeDashoffset="-173" />
+                        <circle cx="100" cy="100" r="70" fill="none" stroke="#FFC107" strokeWidth="30" strokeDasharray="13 301" strokeDashoffset="-217" />
+                        <text x="100" y="110" textAnchor="middle" fontSize="24" fontWeight="bold" fill="#333">46</text>
+                      </svg>
+                      <div className="occupancy-legend">
+                        <div className="legend-item">
+                          <span className="legend-color occupied"></span>
+                          <span>Occupied: 39 units</span>
+                        </div>
+                        <div className="legend-item">
+                          <span className="legend-color vacant"></span>
+                          <span>Vacant: 6 units</span>
+                        </div>
+                        <div className="legend-item">
+                          <span className="legend-color overdue"></span>
+                          <span>Overdue: 2 units</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bottom-section">
+                    <div className="recent-payments">
+                      <div className="section-header">
+                        <h3>Recent Payments</h3>
+                        <a href="#" className="view-all" onClick={(e) => { e.preventDefault(); setActiveTab('Payment History'); }}>View all →</a>
+                      </div>
+                      <table className="payments-table">
+                        <thead>
+                          <tr>
+                            <th>Tenant</th>
+                            <th>Property</th>
+                            <th>Amount</th>
+                            <th>Date</th>
+                            <th>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {recentPayments.map((payment, idx) => (
+                            <tr key={idx}>
+                              <td>{payment.tenant}</td>
+                              <td>{payment.property}</td>
+                              <td>{payment.amount}</td>
+                              <td>{payment.date}</td>
+                              <td><span className={`status-badge ${payment.status.toLowerCase()}`}>{payment.status}</span></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="quick-actions">
+                      <h3>Quick Actions</h3>
+                      {currentUser?.role === 'Landlord' && (
+                        <>
+                          <button className="action-btn" onClick={() => setActiveTab('Properties')}>
+                            <span className="action-icon">🏢</span>
+                            <span>Add Property</span>
+                          </button>
+                          <button className="action-btn" onClick={() => setActiveTab('Tenants')}>
+                            <span className="action-icon">👤</span>
+                            <span>Add Tenant</span>
+                          </button>
+                        </>
+                      )}
+                      <button className="action-btn" onClick={() => setActiveTab('Payment History')}>
+                        <span className="action-icon">📋</span>
+                        <span>Generate Report</span>
+                      </button>
+                      {currentUser?.role === 'Landlord' && (
+                        <button className="action-btn" onClick={() => setActiveTab('Virtual Accounts')}>
+                          <span className="action-icon">💳</span>
+                          <span>View Virtual Accounts</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : (currentUser?.role === 'Caretaker' ? renderCaretakerDashboard() : renderTenantPortal()))}
+
+              {activeTab === 'Properties' && renderProperties()}
+              {activeTab === 'Units' && renderUnits()}
+              {activeTab === 'Tenants' && renderTenants()}
+              {activeTab === 'Virtual Accounts' && renderVirtualAccounts()}
+              {activeTab === 'Payment History' && renderPaymentHistory()}
+              {activeTab === 'Reports' && renderReports()}
+              {activeTab === 'Settings' && renderSettings()}
+              {activeTab === 'Notifications' && renderNotifications()}
+            </div>
+          </main>
+        </div>
+      </div>
+    )
+  }
+
+  // Landing page (default)
+  return (
+    <div className="app">
+      <header className="header">
+        <div className="header-top">
+          <div className="container">
+            <div className="header-nav">
+              <a href="#" className="logo">
+                <div className="logo-icon">R</div>
+                <span>RaaS</span>
+              </a>
+              <nav className="nav">
+                <a href="#features">Features</a>
+                <a href="#pricing">Pricing</a>
+                <a href="#about">About</a>
+              </nav>
+              <div className="header-actions">
+                <button onClick={() => setCurrentPage('login')} className="btn-signin">Sign in</button>
+                <button className="btn-primary-small" onClick={() => setCurrentPage('signup')}>Get started free</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="header-hero">
+          <div className="container hero-container">
+            <div className="hero-left">
+              <p className="hero-badge">⚡ Powered by Nomba Virtual Accounts</p>
+              <h1>Rent as a Service<br /><span className="blue-text">(RaaS), fully automated.</span></h1>
+              <p>RaaS gives every tenant a dedicated virtual account. Payments post instantly, receipts send automatically, and you never chase rent again.</p>
+              <div className="cta-group">
+                <button className="btn-primary" onClick={() => setCurrentPage('signup')}>Start for free</button>
+                <button className="btn-secondary" onClick={() => { setCurrentPage('login'); setEmail('demo@raas.ng'); setPassword('demo1234'); }}>View demo dashboard</button>
+              </div>
+              <p className="note">No credit card required · 14-day free trial</p>
+            </div>
+
+            <div className="hero-right">
+              <div className="dashboard-preview">
+                <div className="preview-header">
+                  <span>July 2024 Overview</span>
+                  <span className="green-text">+12.4%</span>
+                </div>
+                <div className="dashboard-stats">
+                  <div className="stat-row">
+                    <div><span>Revenue</span><strong>₦8.02M</strong></div>
+                    <div><span>Collected</span><strong>96%</strong></div>
+                  </div>
+                  <div className="stat-row">
+                    <div><span>Vacant Units</span><strong>7</strong></div>
+                    <div><span>Overdue</span><strong>₦540K</strong></div>
+                  </div>
+                </div>
+                <div className="dashboard-list">
+                  <div className="list-item">
+                    <span className="name">Emeka Okafor</span>
+                    <span className="amount">₦200,000</span>
+                    <span className="status paid">Paid</span>
+                  </div>
+                  <div className="list-item">
+                    <span className="name">Babajide Sanwo</span>
+                    <span className="amount">₦400,000</span>
+                    <span className="status paid">Paid</span>
+                  </div>
+                  <div className="list-item">
+                    <span className="name">TechHub Ltd</span>
+                    <span className="amount">₦180,000</span>
+                    <span className="status overdue">Overdue</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="stats-bar">
+          <div className="container">
+            <div className="stats-grid">
+              {stats.map((stat) => (
+                <div className="stat-item" key={stat.value}>
+                  <div className="stat-value">{stat.value}</div>
+                  <div className="stat-label">{stat.label}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main>
+        <section className="features-section">
+          <div className="container">
+            <div className="section-head">
+              <p className="section-label">Platform features</p>
+              <h2>Everything you need to collect rent</h2>
+              <p>From virtual account creation to automated receipts — RaaS handles the full rent cycle so you can focus on growing your portfolio.</p>
+            </div>
+            <div className="features-grid">
+              {features.map((feature, idx) => (
+                <div className="feature-item" key={idx}>
+                  <div className="feature-icon">{idx + 1}</div>
+                  <h3>{feature.title}</h3>
+                  <p>{feature.description}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="howto-section">
+          <div className="container">
+            <div className="section-head">
+              <p className="section-label">How it works</p>
+              <h2>Set up in under 10 minutes</h2>
+            </div>
+            <div className="steps-grid">
+              {steps.map((step) => (
+                <div className="step-item" key={step.num}>
+                  <div className="step-number">{step.num}</div>
+                  <h3>{step.title}</h3>
+                  <p>{step.desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="pricing-section">
+          <div className="container">
+            <div className="section-head">
+              <p className="section-label">Pricing</p>
+              <h2>Simple, transparent pricing</h2>
+              <p>Start free. Scale as you grow. No hidden fees.</p>
+            </div>
+            <div className="pricing-grid">
+              {plans.map((plan) => (
+                <article className={`pricing-card ${plan.featured ? 'featured' : ''}`} key={plan.name}>
+                  <h3>{plan.name}</h3>
+                  <div className="price">
+                    <span className="amount">{plan.price}</span>
+                    {plan.period && <span className="period">{plan.period}</span>}
+                  </div>
+                  <p className="units">{plan.units}</p>
+                  <ul className="features-list">
+                    {plan.features.map((feature) => (
+                      <li key={feature}>{feature}</li>
+                    ))}
+                  </ul>
+                  <button className={`plan-btn ${plan.featured ? 'btn-primary' : 'btn-outline'}`} onClick={() => setCurrentPage('signup')}>
+                    {plan.cta}
+                  </button>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="cta-section">
+          <div className="container">
+            <h2>Start collecting rent automatically today</h2>
+            <p>Join 2,400+ landlords who automated rent collection with RaaS.</p>
+            <button className="btn-white" onClick={() => setCurrentPage('signup')}>Create your free account</button>
+          </div>
+        </section>
+      </main>
+
+      <footer className="footer">
+        <div className="container">
+          <div className="footer-content">
+            <p>© 2024 RaaS Technologies Ltd. All rights reserved. Powered by Nomba.</p>
+            <div className="footer-links">
+              <a href="#">Privacy</a>
+              <a href="#">Terms</a>
+              <a href="#">Support</a>
+            </div>
+          </div>
+        </div>
+      </footer>
+    </div>
+  )
+}
+
+export default App
